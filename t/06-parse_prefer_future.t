@@ -20,9 +20,14 @@ set_fixed_time(
 my @simple = (
     { 'friday'             => '24.11.2006 00:00:00'     },
     { 'monday'             => '27.11.2006 00:00:00'     },
+    { 'morning'            => '24.11.2006 08:00:00'     },
+    { 'afternoon'          => '24.11.2006 14:00:00'     },
+    { 'evening'            => '24.11.2006 20:00:00'     },
     { 'thursday morning'   => '30.11.2006 08:00:00'     },
     { 'thursday afternoon' => '30.11.2006 14:00:00'     },
     { 'thursday evening'   => '30.11.2006 20:00:00'     },
+    { 'noon'               => '24.11.2006 12:00:00'     },
+    { 'midnight'           => '25.11.2006 00:00:00'     },
     { 'november'           => '01.11.2007 00:00:00'     },
     { 'january'            => '01.01.2007 00:00:00'     },
     { 'last january'       => '01.01.2005 00:00:00'     },
@@ -66,7 +71,7 @@ my @formatted = (
     { '12/24' => '24.12.2006 00:00:00' },
 );
 
-_run_tests(164, [ [ \@simple ], [ \@combined ], [ \@formatted ] ], \&compare);
+_run_tests(169, [ [ \@simple ], [ \@combined ], [ \@formatted ] ], \&compare);
 
 sub compare
 {

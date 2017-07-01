@@ -21,7 +21,7 @@ use Params::Validate ':all';
 use Scalar::Util qw(blessed);
 use Storable qw(dclone);
 
-our $VERSION = '1.05';
+our $VERSION = '1.05_01';
 
 validation_options(
     on_fail => sub
@@ -51,6 +51,7 @@ sub _init
     my %opts = @_;
 
     my %presets = (
+        demand_future =>  false,
         lang          => 'en',
         format        => 'd/m/y',
         prefer_future =>  false,
@@ -78,6 +79,18 @@ sub _init_check
     my $self = shift;
 
     validate(@_, {
+        demand_future => {
+            # SCALARREF due to boolean.pm's implementation
+            type => BOOLEAN | SCALARREF,
+            optional => true,
+            callbacks => {
+                'mutually exclusive' => sub
+                {
+                    return true unless exists $_[1]->{prefer_future};
+                    die "prefer_future provided\n";
+                },
+            },
+        },
         lang => {
             type => SCALAR,
             optional => true,
@@ -92,6 +105,13 @@ sub _init_check
             # SCALARREF due to boolean.pm's implementation
             type => BOOLEAN | SCALARREF,
             optional => true,
+            callbacks => {
+                'mutually exclusive' => sub
+                {
+                    return true unless exists $_[1]->{demand_future};
+                    die "demand_future provided\n";
+                },
+            },
         },
         time_zone => {
             type => SCALAR | OBJECT,
@@ -523,8 +543,8 @@ sub _post_process
 
     delete $opts{truncate_to};
 
-    if ($self->{Prefer_future} &&
-        (exists $opts{prefer_future} && $opts{prefer_future})
+    if (($self->{Prefer_future} || $self->{Demand_future})
+        && (exists $opts{advance_future} && $opts{advance_future})
     ) {
         $self->_advance_future;
     }
@@ -548,16 +568,19 @@ sub _advance_future
         } @{$self->{data}->{$identifier}};
     };
 
+    my $now = exists $self->{Datetime}
+      ? dclone($self->{Datetime})
+      : DateTime->now(time_zone => $self->{Time_zone});
+
     if ((all { /^(?:second|minute|hour)$/ } keys %modified)
         && (exists $self->{modified}{hour} && $self->{modified}{hour} == 1)
-        && $self->{datetime}->hour < DateTime->now(time_zone => $self->{Time_zone})->hour
+        && ($self->{Demand_future} || $self->{datetime}->hour < $now->hour)
     ) {
         $self->{postprocess}{day} = 1;
     }
     elsif ($token_contains->('weekdays_all')
         && (exists $self->{modified}{day} && $self->{modified}{day} == 1)
-        && ($self->_Day_of_Week(map $self->{datetime}->$_, qw(year month day))
-         < DateTime->now(time_zone => $self->{Time_zone})->wday)
+        && ($self->{Demand_future} || $self->_Day_of_Week(map $self->{datetime}->$_, qw(year month day)) < $now->wday)
     ) {
         $self->{postprocess}{day} = 7;
     }
@@ -568,7 +591,7 @@ sub _advance_future
               ? $self->{modified}{day} == 1
                 ? true : false
               : true)
-        && ($self->{datetime}->day_of_year < DateTime->now->day_of_year)
+        && ($self->{Demand_future} || $self->{datetime}->day_of_year < $now->day_of_year)
     ) {
         $self->{postprocess}{year} = 1;
     }
@@ -700,7 +723,8 @@ not necessarily required.
            datetime      => DateTime->new(...),
            lang          => 'en',
            format        => 'mm/dd/yy',
-           prefer_future => '[0|1]',
+           prefer_future => [0|1],
+           demand_future => [0|1],
            time_zone     => 'floating',
            daytime       => { morning   => 06,
                               afternoon => 13,
@@ -725,8 +749,12 @@ Specifies the format of numeric dates, defaults to 'C<d/m/y>'.
 
 =item * C<prefer_future>
 
-Turns ambiguous weekdays/months to their future relatives. Accepts a boolean,
-defaults to false.
+Prefers future time and dates. Accepts a boolean, defaults to false.
+
+=item * C<demand_future>
+
+Demands future time and dates. Similar to C<prefer_future>, but stronger.
+Accepts a boolean, defaults to false.
 
 =item * C<time_zone>
 
